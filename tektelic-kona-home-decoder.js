@@ -6,6 +6,13 @@
  * This function was created by Al Bennett at Sensational Systems - al@sensational.systems
  */
 
+var number_fields = [
+    "gps_latitude",
+    "gps_longitude",
+    "latitude",
+    "longitude"
+];
+
 function bin2HexStr(arr)
  
 {
@@ -28,17 +35,43 @@ function bin2HexStr(arr)
 }
 
 // Wrapper for ChirpStack
-function Decode(port, bytes) {
-	//Simply call the TTN function with the parameters switched
-	return Decoder(bytes, port);
+function Decode(port, bytes, variables) {
+  //Simply call the TTN function with the parameters switched
+  var decoded = Decoder(bytes, port, variables);
+  decoded = merge(decoded, variables);
+  ensure_types(decoded, number_fields, "Number");
+  return decoded;
+}
+
+function ensure_types(object, keys, type) {
+    var fixed = object;
+    switch (type) {
+        case "String":
+            for (var idx in keys) {
+                if (typeof object[keys[idx]] !== "undefined") {
+                    fixed[keys[idx]] = String(object[keys[idx]]);
+                }
+            }
+            break;
+        case "Number":
+            for (var idx in keys) {
+                if (typeof object[keys[idx]] !== "undefined") {
+                    fixed[keys[idx]] = Number(object[keys[idx]]);
+                }
+            }
+            break;
+    }
+
+    return fixed;
 }
 
 //TTN Handler
-function Decoder(bytes, port) {
+function Decoder(bytes, port, variables) {
 
     var params = {
         "battery_voltage": null,
         "reed_state": null,
+        "reed_state_string": null,
         "light_detected": null,
         "temperature": null,
         "humidity": null,
@@ -56,7 +89,8 @@ function Decoder(bytes, port) {
         "external_input": null,
         "external_input_count": null,
         "decode_data_hex": bin2HexStr(bytes),
-        "bytes": bytes
+        "bytes": bytes,
+        "port": port
     }
 
     for (var i = 0; i < bytes.length; i++) {        
@@ -70,8 +104,10 @@ function Decoder(bytes, port) {
         if(0x01 === bytes[i] && 0x00 === bytes[i+1]) {
             if(0x00 === bytes[i+2]) {
                 params.reed_state = true;
+                params.reed_state_string = "close";
             } else if(0xFF === bytes[i+2]) {
                 params.reed_state = false;
+                params.reed_state_string = "open";
             }
             i = i+2;
         }
@@ -85,7 +121,7 @@ function Decoder(bytes, port) {
             }
             i = i+2;
         }
-		
+    
         // Handle temperature
         if(0x03 === bytes[i] && 0x67 === bytes[i+1]) {
             // Sign-extend to 32 bits to support negative values, by shifting 24 bits
@@ -99,7 +135,7 @@ function Decoder(bytes, port) {
             params.humidity = 0.5 * bytes[i+2];
             i = i+2;
         }
-		
+    
         // Handle impact magnitude
         if(0x05 === bytes[i] && 0x02 === bytes[i+1]) {
             // Sign-extend to 32 bits to support negative values, by shifting 24 bits
@@ -107,7 +143,7 @@ function Decoder(bytes, port) {
             params.impact_magnitude = (bytes[i+2]<<24>>16 | bytes[i+3])/1000;
             i = i+3;
         }
-		
+    
         // Handle break-in
         if(0x06 === bytes[i] && 0x00 === bytes[i+1]) {
             if(0x00 === bytes[i+2]) {
@@ -117,7 +153,7 @@ function Decoder(bytes, port) {
             }
             i = i+2;
         }
-		
+    
         // Handle accelerometer data
         if(0x07 === bytes[i] && 0x71 === bytes[i+1]) {
             // Sign-extend to 32 bits to support negative values, by shifting 24 bits
@@ -133,7 +169,7 @@ function Decoder(bytes, port) {
             params.reed_count = (bytes[i+2] << 8) | bytes[i+3];
             i = i+3;
         }
-		
+    
         // Handle moisture
         if(0x09 === bytes[i] && 0x00 === bytes[i+1]) {
           i = i+1;
@@ -162,7 +198,7 @@ function Decoder(bytes, port) {
             i = i+1;
           }
         }
-		
+    
         // Handle temperature
         if(0x0B === bytes[i] && 0x67 === bytes[i+1]) {
             // Sign-extend to 32 bits to support negative values, by shifting 24 bits
@@ -206,4 +242,9 @@ function Decoder(bytes, port) {
 
     return params
 
+}
+
+function merge(obj1, obj2) {
+    for (var attrname in obj2) { obj1[attrname] = obj2[attrname]; }
+    return obj1;
 }
